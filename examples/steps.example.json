@@ -1,0 +1,47 @@
+{
+  "options": {
+    "wantScreenshot": false,
+    "continueOnError": false,
+    "expectations": [
+      {
+        "name": "target-error",
+        "pattern": "Cannot read properties of undefined",
+        "flags": "i"
+      },
+      {
+        "name": "repro-marker",
+        "pattern": "\\[FIND-REPRO MARKER\\]"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "op": "waitForSelector",
+      "selector": "[aria-label=\"Calendar\"]",
+      "timeoutMs": 20000,
+      "comment": "rail app buttons are targeted by aria-label (Activity/Chat/Calendar/Calls/...), NOT data-tid=app-bar-calendar"
+    },
+    {
+      "op": "click",
+      "selector": "[aria-label=\"Calendar\"]"
+    },
+    {
+      "op": "waitForText",
+      "text": "Meet now",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "click",
+      "text": "Meet now"
+    },
+    {
+      "op": "switchTarget",
+      "titlePrefix": "Microsoft Teams Meeting",
+      "comment": "Meet now opens a new pre-join window; make it active (adjust titlePrefix/selector to match)"
+    },
+    {
+      "op": "screenshot",
+      "fullPage": false
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "req-0001",
+  "options": {
+    "wantDom": false,
+    "wantScreenshot": false,
+    "continueOnError": false,
+    "expectations": [
+      {
+        "name": "repro-marker",
+        "pattern": "\\[FIND-REPRO MARKER\\]"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "op": "waitForSelector",
+      "selector": "[data-tid=\"app-bar-wrapper\"]"
+    },
+    {
+      "op": "click",
+      "selector": "[data-tid=\"app-bar-calendar\"]"
+    }
+  ]
+}

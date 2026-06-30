@@ -1,0 +1,23 @@
+{
+  "name": "find-repro",
+  "version": "1.0.0",
+  "description": "Reusable driver for reproducing errors in the Teams WebView2 host via Playwright/CDP.",
+  "private": true,
+  "license": "Commercial Confidential",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "find-repro-serve": "./bin/serve.js",
+    "find-repro-run": "./bin/run.js"
+  },
+  "scripts": {
+    "serve": "node ./bin/serve.js",
+    "run": "node ./bin/run.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.58.0",
+    "ws": "^8.18.0",
+    "ws": "^8.21.0"
+  }
+}
