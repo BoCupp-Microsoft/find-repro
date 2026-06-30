@@ -72,6 +72,13 @@ Read `README.md` for the full contract. Operationally:
     `expectations[]` (named matches), and `data`/`dom`/`screenshot` when requested.
 - Stop cleanly: write `{ "id": "bye", "type": "shutdown" }` (kills the host process tree).
 
+> **Per-step `console[]` vs cumulative `expectations[]`.** Within one serve session the
+> `expectations[]` matches are evaluated against the **entire accumulated console buffer**, so once
+> a marker has fired this session an expectation stays `matched: true` on every later batch. To
+> attribute an emit to a **specific** action, count the marker in that step's `console[]` (only the
+> *new* lines for that step), **not** the expectation flag. Each `bin/run.mjs` run is a fresh
+> process, so its buffer is per-run — handy for clean, independent trials.
+
 > **Where errors are logged matters.** `console[]` entries carry a `source`:
 > `console` (main page), `pageerror`, `host` (ms-teams.exe stdio), and **`worker`**.
 > Teams runs the CDL, the **notification/toast resolvers**, and telemetry in
@@ -124,17 +131,50 @@ Execute these stages in order. Keep serve mode alive across the whole run; reset
   core (e.g. `endEntity is requesting endEntity`), not the whole line.
 - If zero matches: report that and ask the user to confirm the wording / source repo. Stop.
 
-### 2. Determine emit conditions
+### 2. Determine emit conditions — the predicate gates you must defeat
 
-- Read the emitting function. Identify the precise branch/guard and the inputs/state that make
-  it fire (entity type, slot, action, props, feature flag, async ordering, etc.).
-- Record as structured `emitConditions` (prose + the concrete predicate).
+The error line almost always sits behind a chain of **guards**: nested `if`s, `&&` conditions,
+`switch` cases, early-returns, and feature flags between the function's entry and the emit line.
+Control flow reaches the error only if **every** guard resolves the way that leads there. Treat
+each guard as a gate you must **defeat**, one at a time, by controlling its inputs/state.
 
-### 3. Understand callers
+- **Enumerate the gates.** Read the emitting function and list, in order, every
+  predicate/branch/early-return on the path to the emit line. For each, record the **concrete
+  condition** and the input/state that drives control flow *toward* the error (and which
+  early-returns you must avoid). This list is your checklist while driving — each failed attempt is
+  usually one gate you haven't defeated yet.
+- **Read each predicate as a state variable.** A guard like `if (event.isRead)` or
+  `if (entity.type === X)` literally names the state that must hold. Note the exact field(s) it
+  reads — those are the variables your repro has to control.
+- **The emit site's unit test is a precondition oracle.** The function's `*.test.ts` usually
+  constructs the minimal input that satisfies the guards. Titles and the odd-one-out case are gold
+  (e.g. one case titled "should discard already read events" passing `isRead: true` while every
+  other uses `false` reveals `isRead: true` is the triggering input). Read it to learn the gates'
+  required values for free.
+- Record the gate chain as structured `emitConditions` (prose + the concrete predicates).
 
-- Walk up the call graph from the emit site to UI-reachable entry points. Identify which
-  components/surfaces invoke the path and under what props/state. Note the most likely
-  user-facing trigger(s). Record `callers[]`.
+### 3. Reach the emit site — a call chain or an event you must produce
+
+Defeating the predicate gates only matters once the function actually **runs**. So determine how it
+gets invoked and how *you* can cause that from the running product. Two cases — identify which:
+
+- **Direct call chain → UI.** Walk up the call graph from the emit site to a UI-reachable entry
+  point (a click / navigation / render). Identify which components/surfaces invoke the path and
+  under what props/state, and note the most likely user-facing trigger(s).
+- **Event-driven invocation.** If the function is an **event/message handler** — a Web Worker
+  message handler, a subscription callback, a longpoll/push handler (common for CDL, toast, and
+  telemetry resolvers under `worker/` paths) — it is **not** reached by a direct call; it runs when
+  an **event fires**. Here the gate is the event itself: determine **what fires it**, then work out
+  whether you can **generate that event yourself** through an action you can take (the user action
+  that makes the server push it, or the state change that re-delivers it). Only if producing the
+  event strictly requires something outside this one client (an external sender, a second
+  account/machine, background server timing) do you record that as the blocker.
+- **Find what writes the gated state** (bridges back to Stage 2). For a gate on `entity.X`, grep
+  for where `X` is set/toggled (mutations, reducers, event producers — e.g. a `toggleRead` mutation
+  doing `isRead: !isRead`). If a **user action changes X**, the error is **transition-triggered**:
+  the entity's *initial* X is the real precondition and the trigger is the **state flip** — itself
+  an action/event you can produce.
+- Record `callers[]` (and, for the event-driven case, the event and exactly how you produce it).
 
 ### 4. Form hypotheses
 
@@ -191,6 +231,14 @@ For each hypothesis:
      signal of a **race**: hammer the identical steps many times (widen the post-action watch
      window, add timing jitter, vary preconditions) before concluding. This is the case to be
      most stubborn about.
+   - **Outcome varies across identical repeats, and the caller/path marker is SILENT on the
+     misses** → the trigger is **not your action**: either an **uncontrolled precondition** (an
+     entity's initial state you never set up) or an **upstream/external event** (server push,
+     long-poll, a second machine/account, background sync). Do **not** just hammer repeats — that
+     only helps a *true race* where the path IS reliably reached. Instead **control the
+     precondition** (see "Preconditions & state-triggered errors" below) or find what *produces*
+     the inbound event and drive that. A caller marker that fires only sometimes, uncorrelated
+     with your steps, is the signature of this case.
    - **Not matched, path not reached** → refine the *steps* (next variation) or the *hypothesis*.
 4. On miss, exhaust repeats for a suspected race, then step variations, then advance to the next
    hypothesis — and keep generating fresh hypotheses — until reproduced or you have truly
@@ -199,6 +247,28 @@ For each hypothesis:
 > Persistence note: identical re-runs and a wide hypothesis search are expected and encouraged.
 > Never abandon a promising hypothesis after a single miss when timing/async/event ordering
 > could be involved — be stubborn, vary the conditions, and repeat.
+
+#### Preconditions & state-triggered errors
+
+Many errors fire only when an entity is in a particular **initial state** and you then act on it
+(a state *transition*) — not on any pure action. If Stage 3 found the gated state is changed by a
+user action, or you see the "varies with identical steps + silent caller marker" signature above,
+work the precondition explicitly:
+
+- **Self-arm the precondition.** Don't wait for ambient state (and never rely on luck or an
+  external actor putting an entity in the right state). Establish it yourself: perform the
+  **inverse** action first to force the required state, then the **forward** action to fire the
+  error — e.g. mark an item *unread*, then select it to mark it *read*.
+- **State-aware selection.** Probe the live DOM/state first (`evaluate`/`domSnapshot`) and target
+  an element **known** to be in the required state — e.g. an attribute or `:has()` selector like
+  `[data-tid="activity-feed-list-item"]:has(.unread-indicator)` — **not** "the first matching
+  element." Selecting the first item often silently picks one already in the wrong state and misses.
+- **Confirm causality with a differential A/B.** Hold everything constant and vary **only** the
+  suspected precondition across two trials — one predicted hit, one predicted miss — comparing the
+  **per-step** marker counts (deltas, per the engine note, not the cumulative expectation flag). A
+  clean "fires with X, silent without X" isolates the causal variable and usually converts a flaky
+  repro into a deterministic one. Prefer this deterministic repro for the artifact over a flaky
+  feed-load-timing variant.
 
 
 
