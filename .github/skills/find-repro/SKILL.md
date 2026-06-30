@@ -87,6 +87,15 @@ Read `README.md` for the full contract. Operationally:
 > path (e.g. `data-resolvers-*/.../worker/...`); such errors only surface via the
 > worker source, and may be **event-driven** (see below).
 
+> **Markers in product code require a host restart to take effect.** When you inject a
+> marker (or any temporary edit) into the Teams web code, the **running host is still
+> serving the previously-compiled bundle** — your change does nothing until the dev
+> server rebuilds it and the host reloads. After editing, let the dev-server rebuild
+> finish, then **shut down and restart the host** (`bye`, then re-boot serve) so it
+> picks up the recompiled code. This matters most for **worker** bundles. Budget for a
+> rebuild + cold start on every marker iteration; if a freshly-added marker never
+> appears, a stale bundle is the first thing to suspect.
+
 ### Step ops
 
 `click`, `fill`, `type`, `press`, `hover`, `selectOption`, `goto`, `evaluate`,
@@ -126,6 +135,14 @@ Execute these stages in order. Keep serve mode alive across the whole run; reset
   `teams-client-native-shell`. Match on the **stable** part of the message (strip GUIDs/CIDs,
   interpolated values). Find the exact emit site: `repo`, `file`, `line`, enclosing `symbol`,
   and a short `snippet`.
+- **A single error string often has many emit sites — enumerate all of them, and rank by
+  severity.** Error *codes* (enums like `SomeLoggingCodes.X`, shared message prefixes) are
+  frequently emitted from multiple places, sometimes at different log levels — an
+  error/telemetry call at one site, a plain info `log` at another. Grep the **whole code/enum
+  name** (not just one message) to list every site, and note each one's **severity**
+  (telemetry/error vs info-only `log`) and which mapper/component owns it. Choose the target
+  deliberately: the most-reproducible site may be benign info-level noise, while the site the
+  report actually cares about is a rarer, higher-severity sibling. Don't fixate on the first match.
 - Derive a robust **detection regex** that matches the error but tolerates dynamic substrings
   (ids, names). This regex powers the serve `expectations`. Prefer the distinctive literal
   core (e.g. `endEntity is requesting endEntity`), not the whole line.
@@ -151,6 +168,13 @@ each guard as a gate you must **defeat**, one at a time, by controlling its inpu
   (e.g. one case titled "should discard already read events" passing `isRead: true` while every
   other uses `false` reveals `isRead: true` is the triggering input). Read it to learn the gates'
   required values for free.
+- **When normal data passes every gate, instrument the gate's *inputs* — not just whether it
+  fired.** A boolean "reached / not-reached" marker is nearly useless when ordinary entities clear
+  all the guards. Instead, log the **actual field/state values the predicate reads, for every item
+  the function processes** (a field-presence / value dump placed just before the guard). Driving
+  normal product activity then prints the real input distribution, which usually reveals *which
+  specific value* on *which item* defeats the gate — handing you the repro directly, instead of
+  guessing. This is the single highest-leverage move when "I can't get the guard to fire."
 - Record the gate chain as structured `emitConditions` (prose + the concrete predicates).
 
 ### 3. Reach the emit site — a call chain or an event you must produce
@@ -169,11 +193,33 @@ gets invoked and how *you* can cause that from the running product. Two cases �
   that makes the server push it, or the state change that re-delivers it). Only if producing the
   event strictly requires something outside this one client (an external sender, a second
   account/machine, background server timing) do you record that as the blocker.
+- **Displaying an entity is NOT invoking its handler.** A per-item handler (mapper, resolver,
+  reducer) runs when the item's **event is delivered** to it — typically a push/subscription/
+  re-emit — *not* when the UI surface that **renders** that item is opened. Opening the feed/list
+  that shows the entity makes it visible, but usually does **not** push its event through the
+  handler; assuming "open the surface = run the handler" sends you down dead-end UI navigation.
+  Confirm delivery with a **caller marker on the handler itself** (see Stage 5), not by the item
+  appearing on screen.
+- **Per-item re-emit is the generic on-demand invocation lever.** When you need a *chosen* entity
+  pushed through a per-item handler **now** — for **any** kind of bug, not just state-triggered
+  ones (data-shape, content, malformed-field, etc.) — find an action that **re-delivers that one
+  item's event**: a read/unread toggle, a re-fetch/refresh of the item, re-selecting it, an
+  optimistic mutation that re-emits it. Such a re-emit re-runs the handler on exactly the entity
+  you want, decoupled from ambient/external delivery — and it works **regardless of whether the
+  toggled state is the actual cause** (the re-delivery is the point; the cause may be the item's
+  shape). Prefer this over hoping the feed-load or a server push happens to carry your target item.
+  (See "Re-run the pipeline on a chosen item by toggling its state" in Stage 5.)
 - **Find what writes the gated state** (bridges back to Stage 2). For a gate on `entity.X`, grep
   for where `X` is set/toggled (mutations, reducers, event producers — e.g. a `toggleRead` mutation
   doing `isRead: !isRead`). If a **user action changes X**, the error is **transition-triggered**:
   the entity's *initial* X is the real precondition and the trigger is the **state flip** — itself
   an action/event you can produce.
+- **Watch for fan-out: one input, many parallel consumers.** A single event/input is often
+  dispatched to **several handlers at once** (e.g. one feed/event delivered to multiple mappers,
+  subscribers, or reducers in parallel), and the same error code can fire from any of them. Map the
+  dispatch/fan-out so you instrument **all** the consumers and attribute the emit to the right one —
+  otherwise you'll instrument a single handler, see nothing, and wrongly conclude "path not reached"
+  when a sibling consumer is the one emitting.
 - Record `callers[]` (and, for the event-driven case, the event and exactly how you produce it).
 
 ### 4. Form hypotheses
@@ -183,10 +229,16 @@ gets invoked and how *you* can cause that from the running product. Two cases �
 - **Aim wide — generate at least 6–8 hypotheses** before you start driving, and keep adding new
   ones as you learn. Deliberately vary across dimensions: different **surfaces/apps** (Chat,
   Activity, Calendar, Teams/Channels, Calls, Search), different **entity states** (read vs
-  unread, empty vs populated, focused vs background), different **timings** (immediately after
-  boot vs after settle, fast vs slow interaction), **multi-step journeys**, **window/iframe
-  context** (main window vs a secondary window via `switchTarget`), and any **feature-flag or
-  setting** the emit condition depends on. Don't fixate on one theory.
+  unread, empty vs populated, focused vs background), different **entity / payload types**
+  (i.e. the *kind* of item or event flowing through the path, not just its state), different
+  **timings** (immediately after boot vs after settle, fast vs slow interaction), **multi-step
+  journeys**, **window/iframe context** (main window vs a secondary window via `switchTarget`),
+  and any **feature-flag or setting** the emit condition depends on. Don't fixate on one theory.
+- **When a gate checks a field, the trigger is usually a rarer or structurally-different entity
+  type that lacks it.** Common items have the field, so they sail through; deliberately exercise
+  the **uncommon / edge / differently-shaped** item types on the same surface (the input dump from
+  Stage 2 tells you which type is the odd one out). "Vary the data shape" is often more productive
+  than "vary the action."
 
 ### 5. Reproduce (persistent loop)
 
@@ -213,6 +265,17 @@ adjust state setup, try adjacent surfaces, and combine clues across hypotheses. 
 `partial`/`not-reproduced` **only after exhaustive effort**, and when you do, clearly explain
 what you tried and exactly what blocks a repro (e.g. requires an external sender / second
 account / a specific flag).
+
+**Calibrate ambient noise first (event-driven/worker errors).** Before trusting any hit, run a
+**zero-action baseline**: reach the surface, then watch the same window length with **no
+interaction**, and count the target/caller markers. This tells you the background delivery rate
+(server pushes, long-poll, sync) so you can tell a *caused* hit from ambient noise. Then **gate
+every hit on a same-step caller marker**: an expectation match is only attributable to your action
+if your trigger's **caller marker fired in that same step** (per-step `console[]`, not the
+cumulative expectation flag). An expectation hit while the caller marker is silent — or that also
+appears in the zero-action baseline — was produced by something else (ambient/external), and is
+**not** your repro, no matter how exciting. Doing this early stops you anchoring on a flaky
+non-causal "hit" and burning the budget defending it.
 
 For each hypothesis:
 1. Ensure serve is `ready`; navigate to the agreed **baseline** (e.g. Chat home, or close any
@@ -269,6 +332,16 @@ work the precondition explicitly:
   clean "fires with X, silent without X" isolates the causal variable and usually converts a flaky
   repro into a deterministic one. Prefer this deterministic repro for the artifact over a flaky
   feed-load-timing variant.
+- **Re-run the pipeline on a chosen item by toggling its state.** Flipping an entity's state often
+  re-feeds *that specific item* through the processing path on demand — and frequently the toggle
+  re-delivers **in either direction** (and back), so you can re-trigger repeatedly without waiting
+  for an ambient or external event, and **without depending on the item's current state**. This is
+  a reliable way to push one chosen entity (e.g. the rare/edge-shaped item from Stage 4) through the
+  code as many times as you need. **This applies even when the read/toggle state is NOT the cause**
+  — for a data-shape / malformed-field / content bug, the toggle is just the cheapest way to
+  re-deliver your target item to the handler on demand; the cause is the item's shape, the toggle
+  is only the delivery mechanism (see Stage 3, "Per-item re-emit is the generic on-demand
+  invocation lever").
 
 
 
@@ -307,6 +380,12 @@ Keep the **shortest** sequence that still emits the error. Record it as `minimum
 - Use a unique, greppable tag: `console.error("[[FIND-REPRO:<slug>]] reached <symbol>")` placed
   at the suspected line. Detect it with an expectation `"\\[\\[FIND-REPRO:<slug>\\]\\]"`.
 - Also place markers to validate the callers or branches leading up to the emit site are being reached (e.g. `console.error("[[FIND-REPRO:<slug>]] caller <symbol>")`).
+- **Prefer a field-dump marker over a bare "reached" marker.** Inside (or just before) the guard,
+  log the **values the predicate reads** — e.g.
+  `console.error("[[FIND-REPRO:<slug>]] guard inputs " + JSON.stringify({fieldA, fieldB, type}))`.
+  When normal data clears the gate, this is what tells you *which input on which item* defeats it
+  (see Stage 2). When an error has multiple emit sites or parallel consumers, mark **every** site so
+  you can attribute the emit correctly (see Stages 1 and 3).
 - Record every marker edit in `evidence.markersUsed` (file, line, what was added).
 - Revert the markers that weren't important to the repro but leave the ones that were critical to detecting the repro for review by the dev.
 - Never commit, never push, never start the dev server, never weaken/disable product code.
