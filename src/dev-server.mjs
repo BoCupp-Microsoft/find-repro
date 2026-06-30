@@ -1,7 +1,5 @@
-"use strict";
-
-const https = require("node:https");
-const http = require("node:http");
+import https from "node:https";
+import http from "node:http";
 
 /**
  * Verifies that the locally-managed Teams web dev server is reachable.
@@ -13,7 +11,7 @@ const http = require("node:http");
 class DevServerChecker {
   /**
    * @param {object} config
-   * @param {import("./logger").Logger} [logger]
+   * @param {import("./logger.mjs").Logger} [logger]
    */
   constructor(config, logger) {
     this.config = config;
@@ -51,4 +49,4 @@ class DevServerChecker {
   }
 }
 
-module.exports = { DevServerChecker };
+export { DevServerChecker };

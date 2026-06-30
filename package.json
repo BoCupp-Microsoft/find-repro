@@ -1,22 +1,20 @@
 {
   "name": "find-repro",
   "version": "1.0.0",
-  "description": "Reusable driver for reproducing errors in the Teams WebView2 host via Playwright/CDP.",
+  "description": "Reusable driver for reproducing errors in the Teams WebView2 host via raw CDP.",
   "private": true,
   "license": "Commercial Confidential",
+  "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
-    "find-repro-serve": "./bin/serve.js",
-    "find-repro-run": "./bin/run.js"
+    "find-repro-serve": "./bin/serve.mjs",
+    "find-repro-run": "./bin/run.mjs"
   },
   "scripts": {
-    "serve": "node ./bin/serve.js",
-    "run": "node ./bin/run.js",
-    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\""
-  },
-  "dependencies": {
-    "ws": "^8.21.0"
+    "serve": "node ./bin/serve.mjs",
+    "run": "node ./bin/run.mjs",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.mjs\""
   }
 }

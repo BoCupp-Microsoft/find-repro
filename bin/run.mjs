@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-"use strict";
-
 /**
  * Batch / replay mode.
  *
@@ -16,16 +14,16 @@
  * Result file shape:
  *   { "status": "ok"|"error", "mainWindow": {...}, "results": [ observation... ] }
  *
- * Usage: node bin/run.js --steps <file> [--out <file>] [--keep-open]
+ * Usage: node bin/run.mjs --steps <file> [--out <file>] [--keep-open]
  *                        [--session-dir <path>] [--cdp-port <n>] [--start-url <url>]
  *                        [--overwrite-conflicts]
  */
 
-const fs = require("node:fs");
-const path = require("node:path");
+import fs from "node:fs";
+import path from "node:path";
 
-const { Session } = require("../src/session");
-const { parseArgs } = require("./argv");
+import { Session } from "../src/session.mjs";
+import { parseArgs } from "./argv.mjs";
 
 async function main() {
   const { overrides, flags } = splitArgs(process.argv.slice(2));

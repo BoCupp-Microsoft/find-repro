@@ -1,71 +1,28 @@
-"use strict";
-
 /**
- * Aggregates console output from every WebView2 page plus the host process
- * stdout/stderr into a single ordered buffer. Supports:
+ * Aggregates console/error/log output from every attached CDP target (pages,
+ * workers, iframes) plus the host process stdout/stderr into a single ordered
+ * buffer. Supports:
  *   - "new since last read" cursors (for the per-step observation payload);
  *   - evaluating named expectations (regex/substring) against captured text.
  *
  * Each entry: { seq, ts, source, level, text, page? }
- *   source: "console" | "pageerror" | "host"
- *   level:  console message type, "error", or host stream name ("stdout"/"stderr")
- *   page:   { title?, url } for page-sourced entries
+ *   source: "worker" (any CDP target, via ingestTarget) | "host" (process stdio)
+ *   level:  console message type / log level, or host stream name ("stdout"/"stderr")
+ *   page:   { url } where url is the target's identifier (for "worker" entries)
  */
 class ConsoleMonitor {
-  /** @param {import("./logger").Logger} [logger] */
+  /** @param {import("./logger.mjs").Logger} [logger] */
   constructor(logger) {
     this.logger = logger;
     this.entries = [];
     this._seq = 0;
-    this._attached = new WeakSet();
-    this._dedupe = new Map();
   }
 
   _push(entry) {
-    // De-duplicate identical messages delivered within a short window. Kept as a
-    // safety net even though page (Playwright) and worker (CDP) capture paths are
-    // now disjoint and shouldn't double-deliver.
-    if (entry.source === "console" || entry.source === "pageerror") {
-      const key = `${entry.source}|${entry.level}|${entry.page && entry.page.url}|${entry.text}`;
-      const now = Date.now();
-      const prev = this._dedupe.get(key);
-      if (prev && now - prev < 1000) {
-        return prev; // treat as the same logical entry
-      }
-      this._dedupe.set(key, now);
-    }
     entry.seq = this._seq++;
     entry.ts = new Date().toISOString();
     this.entries.push(entry);
     return entry;
-  }
-
-  /** Attaches console/error listeners to a Playwright page (idempotent). */
-  attach(page) {
-    if (!page || this._attached.has(page)) return;
-    this._attached.add(page);
-
-    const pageInfo = () => ({ url: safeUrl(page) });
-
-    page.on("console", msg => {
-      this._push({
-        source: "console",
-        level: msg.type(),
-        text: msg.text(),
-        page: pageInfo(),
-      });
-    });
-
-    page.on("pageerror", err => {
-      this._push({
-        source: "pageerror",
-        level: "error",
-        text: err && err.stack ? err.stack : String(err),
-        page: pageInfo(),
-      });
-    });
-
-    page.on("close", () => this._attached.delete(page));
   }
 
   /** Ingests a single line from the host process stdio. */
@@ -75,9 +32,9 @@ class ConsoleMonitor {
   }
 
   /**
-   * Ingests a console message from a non-page CDP target (a Web Worker, etc.),
-   * captured via the browser CDP session. Pages are captured via attach().
-   * @param {string} target Target name (e.g. precompiled-web-worker-*.js)
+   * Ingests a console/error/log message from any attached CDP target (page,
+   * worker, or iframe), captured via the browser CDP session.
+   * @param {string} target Target name/identifier (e.g. "page #1 Chat …" or a worker url)
    * @param {string} level console type / log level
    * @param {string} text message text
    */
@@ -123,12 +80,4 @@ class ConsoleMonitor {
   }
 }
 
-function safeUrl(page) {
-  try {
-    return page.url();
-  } catch {
-    return undefined;
-  }
-}
-
-module.exports = { ConsoleMonitor };
+export { ConsoleMonitor };

@@ -1,25 +1,24 @@
-"use strict";
-
 /**
  * Test harness for exercising the pure-CDP infrastructure (CdpSession,
- * CdpTarget, ConsoleMonitor) against a plain headless Edge — no Teams host, no
- * WebView2. It serves the local fixtures over HTTP (so workers load same-origin),
- * launches Edge with a remote-debugging port, and connects a CdpSession exactly
- * the way the product does. Everything a test needs is returned from launch().
+ * CdpTarget, ConsoleMonitor) against a plain headless Chromium browser (Chrome
+ * by default; see findBrowser) — no Teams host, no WebView2. It serves the local
+ * fixtures over HTTP (so workers load same-origin), launches the browser with a
+ * remote-debugging port, and connects a CdpSession exactly the way the product
+ * does. Everything a test needs is returned from launch().
  */
 
-const { spawn, execFileSync } = require("node:child_process");
-const fs = require("node:fs");
-const os = require("node:os");
-const net = require("node:net");
-const http = require("node:http");
-const path = require("node:path");
+import { spawn, execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import net from "node:net";
+import http from "node:http";
+import path from "node:path";
 
-const { CdpSession } = require("../../src/cdpSession");
-const { ConsoleMonitor } = require("../../src/consoleMonitor");
-const { CdpTarget } = require("../../src/cdpTarget");
+import { CdpSession } from "../../src/cdp-session.mjs";
+import { ConsoleMonitor } from "../../src/console-monitor.mjs";
+import { CdpTarget } from "../../src/cdp-target.mjs";
 
-const FIXTURES = path.join(__dirname, "..", "fixtures");
+const FIXTURES = path.join(import.meta.dirname, "..", "fixtures");
 
 /**
  * Resolves a Chromium browser (override with FIND_REPRO_TEST_BROWSER). Chrome is
@@ -122,7 +121,7 @@ const silentLogger = { log() {}, warn() {}, child() { return this; } };
 async function launch() {
   const { server, origin } = await serveFixtures();
   const port = await freePort();
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-edge-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-test-"));
   const exe = findBrowser();
 
   const child = spawn(
@@ -225,4 +224,4 @@ async function launch() {
   };
 }
 
-module.exports = { launch, waitFor, waitForEntry, sleep };
+export { launch, waitFor, waitForEntry, sleep };

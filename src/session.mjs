@@ -1,17 +1,15 @@
-"use strict";
+import fs from "node:fs";
+import path from "node:path";
 
-const fs = require("node:fs");
-const path = require("node:path");
-
-const { createConfig } = require("./config");
-const { Logger } = require("./logger");
-const { DevServerChecker } = require("./devServer");
-const { ConfigurationManager } = require("./configuration");
-const { ShellLauncher } = require("./shellLauncher");
-const { CdpSession } = require("./cdpSession");
-const { ConsoleMonitor } = require("./consoleMonitor");
-const { TargetManager } = require("./targetManager");
-const { StepRunner } = require("./stepRunner");
+import { createSettings } from "./settings.mjs";
+import { Logger } from "./logger.mjs";
+import { DevServerChecker } from "./dev-server.mjs";
+import { HostConfigManager } from "./host-config.mjs";
+import { ShellLauncher } from "./shell-launcher.mjs";
+import { CdpSession } from "./cdp-session.mjs";
+import { ConsoleMonitor } from "./console-monitor.mjs";
+import { TargetManager } from "./target-manager.mjs";
+import { StepRunner } from "./step-runner.mjs";
 
 /**
  * Long-lived, stateful driver session shared by both the interactive (serve)
@@ -21,24 +19,24 @@ const { StepRunner } = require("./stepRunner");
  */
 class Session {
   /**
-   * @param {object} [overrides] Config overrides (see config.js).
+   * @param {object} [overrides] Settings overrides (see settings.mjs).
    * @param {object} [deps]
    * @param {Logger} [deps.logger]
    */
   constructor(overrides = {}, { logger } = {}) {
-    this.config = createConfig(overrides);
+    this.settings = createSettings(overrides);
     this.logger = logger || new Logger("find-repro");
 
     this.consoleMonitor = new ConsoleMonitor(this.logger.child("console"));
-    this.devServer = new DevServerChecker(this.config, this.logger.child("devserver"));
-    this.configuration = new ConfigurationManager(this.config, {
+    this.devServer = new DevServerChecker(this.settings, this.logger.child("devserver"));
+    this.hostConfig = new HostConfigManager(this.settings, {
       logger: this.logger.child("config"),
     });
-    this.shellLauncher = new ShellLauncher(this.config, {
+    this.shellLauncher = new ShellLauncher(this.settings, {
       logger: this.logger.child("shell"),
       consoleMonitor: this.consoleMonitor,
     });
-    this.cdp = new CdpSession(this.config, {
+    this.cdp = new CdpSession(this.settings, {
       consoleMonitor: this.consoleMonitor,
       logger: this.logger.child("cdp"),
     });
@@ -54,13 +52,13 @@ class Session {
    * @returns {Promise<{title:string|undefined, url:string|undefined}>} main window info
    */
   async start() {
-    fs.mkdirSync(this.config.sessionDir, { recursive: true });
+    fs.mkdirSync(this.settings.sessionDir, { recursive: true });
 
     this.logger.log("checking dev server...");
     await this.devServer.check();
 
     this.logger.log("ensuring host configuration...");
-    const summary = await this.configuration.ensure();
+    const summary = await this.hostConfig.ensure();
     this.logger.log(summary);
 
     this.logger.log("launching host...");
@@ -72,7 +70,7 @@ class Session {
     this.logger.log("connecting over CDP...");
     await this.cdp.connect();
 
-    this.targetManager = new TargetManager(this.cdp, this.config, {
+    this.targetManager = new TargetManager(this.cdp, this.settings, {
       logger: this.logger.child("targets"),
     });
 
@@ -83,7 +81,7 @@ class Session {
     this.stepRunner = new StepRunner({
       targetManager: this.targetManager,
       cdp: this.cdp,
-      config: this.config,
+      config: this.settings,
       logger: this.logger.child("step"),
     });
 
@@ -136,7 +134,7 @@ class Session {
 
   async _artifactScreenshot(page) {
     if (!page) return null;
-    const dir = path.join(this.config.sessionDir, "screenshots");
+    const dir = path.join(this.settings.sessionDir, "screenshots");
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `obs-${Date.now()}.png`);
     try {
@@ -175,4 +173,4 @@ async function safeContent(page) {
   }
 }
 
-module.exports = { Session };
+export { Session };

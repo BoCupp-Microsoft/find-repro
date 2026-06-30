@@ -19,7 +19,7 @@ dev) — it only verifies the server is reachable.
   `https://local.teams.office.com/v2/?skipauthstrap=1`
   (start it yourself, e.g. `yarn start:rspack react-web-client`, and leave it running).
 - `ms-teams.exe` installed (default: `%LOCALAPPDATA%\Microsoft\WindowsApps\ms-teams.exe`).
-- Node.js >= 20. Dependencies installed (`npm install`).
+- Node.js >= 22 (for the built-in global `WebSocket`). Zero dependencies — no `npm install` needed.
 
 ## What it does on boot (`Session.start`)
 
@@ -75,10 +75,10 @@ waits up to `mainWindowTimeoutMs` (default 240s) and logs the targets it sees so
 wait is never a silent black box.
 
 The driver speaks **raw CDP only** (no Playwright). It opens one strongly-typed
-browser session (`src/cdpSession.js`) and turns on `Target.setAutoAttach`, so it
+browser session (`src/cdp-session.mjs`) and turns on `Target.setAutoAttach`, so it
 attaches to **every** target — the core, the main window, later windows, iframes,
 and all workers — with no `/json/list` polling and no reconnecting. Each window/
-iframe is driven via `src/cdpTarget.js` (DOM through `Runtime.evaluate`). Page and
+iframe is driven via `src/cdp-target.mjs` (DOM through `Runtime.evaluate`). Page and
 worker console arrive through that one session. The main window is the page target
 whose app-bar rail is interactive.
 
@@ -91,7 +91,7 @@ in the session directory — ideal for a skill iterating on a hypothesis without
 paying the host-boot cost each time.
 
 ```bash
-node bin/serve.js --session-dir .\.session
+node bin/serve.mjs --session-dir .\.session
 ```
 
 Files in `<sessionDir>`:
@@ -124,7 +124,7 @@ Runs a full steps file to completion and writes a result file; exits 0 if every
 step passed, 1 otherwise.
 
 ```bash
-node bin/run.js --steps .\examples\meet-now.json --out .\.session\result.json
+node bin/run.mjs --steps .\examples\meet-now.json --out .\.session\result.json
 ```
 
 ## Step operations
@@ -216,7 +216,7 @@ all captured console text — a convenient way to assert a repro/marker appeared
 Teams runs critical logic — the Conversation Data Layer (CDL), the
 notification/**toast** resolvers, and telemetry — in **separate Web Worker
 targets** (`precompiled-web-worker-*.js`, `precompiled-telemetry-web-worker.js`),
-**not** in the page. find-repro's single CDP session (`src/cdpSession.js`)
+**not** in the page. find-repro's single CDP session (`src/cdp-session.mjs`)
 auto-attaches to every page, iframe, and worker target and folds their console
 into observations (`source: "worker"`), so errors logged there (e.g.
 `ToastEventIsAlreadyRead`) are captured. This is essential for detecting
@@ -228,7 +228,7 @@ CLI flags (both entry points): `--session-dir`, `--cdp-port`, `--start-url`,
 `--shell-exe`, `--config-json`, `--overwrite-conflicts`, `--kill-existing`,
 `--no-reuse`. Env vars: `FIND_REPRO_SESSION_DIR`, `FIND_REPRO_CDP_PORT`,
 `FIND_REPRO_START_URL`, `FIND_REPRO_SHELL_EXE`, `FIND_REPRO_HOST_ROOT`,
-`LOCALAPPDATA`. See `src/config.js` for all defaults.
+`LOCALAPPDATA`. See `src/settings.mjs` for all defaults.
 
 The host exe is auto-resolved in this order: `--shell-exe`/`FIND_REPRO_SHELL_EXE`
 → most-recent `<host-root>\src\_build\<arch>\<config>\ms-teams.exe` (locally
@@ -238,12 +238,12 @@ stub.
 ## Layout
 
 ```
-src/   config, logger, devServer, configuration, shellLauncher, cdpSession,
-       cdpTarget, consoleMonitor, targetManager, stepRunner, session
-bin/   serve.js (interactive), run.js (batch), argv.js
+src/   settings, logger, dev-server, host-config, shell-launcher, cdp-session,
+       cdp-target, console-monitor, target-manager, step-runner, session  (.mjs)
+bin/   serve.mjs (interactive), run.mjs (batch), argv.mjs
 examples/  meet-now.json (validated batch flow), request.example.json (serve
-           request envelope), drive.js (step-by-step serve driver),
-           debug-appbar.js (target diagnostic)
+           request envelope), drive.mjs (step-by-step serve driver),
+           debug-appbar.mjs (target diagnostic)
 confirmed/ validated step sequences (meet-now flow, endEntity repro)
 repros/    skill output: handoff artifacts (SCHEMA.md) + runnable steps
 .github/skills/find-repro/  the find-repro skill (SKILL.md)

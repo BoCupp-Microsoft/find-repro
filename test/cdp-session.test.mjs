@@ -1,8 +1,6 @@
-"use strict";
-
 /**
  * Exercises the CdpSession target graph and ConsoleMonitor capture against
- * headless Edge, with no Teams host involved. Verifies that:
+ * headless Chromium, with no Teams host involved. Verifies that:
  *   - page, dedicated-worker, and newly window.open()'d targets are enumerated;
  *   - console output, uncaught errors, and unhandled promise rejections are
  *     captured from the main page, the worker, and a second window;
@@ -10,14 +8,14 @@
  * window.open (not Target.createTarget), matching how the product opens windows.
  */
 
-const { test, before, after, describe } = require("node:test");
-const assert = require("node:assert");
+import { test, before, after, describe } from "node:test";
+import assert from "node:assert";
 
-const { launch, waitFor, waitForEntry } = require("./helpers/harness");
+import { launch, waitFor, waitForEntry } from "./helpers/harness.mjs";
 
 const nonce = () => Math.random().toString(36).slice(2, 10);
 
-describe("CdpSession targets + ConsoleMonitor capture (headless Edge)", () => {
+describe("CdpSession targets + ConsoleMonitor capture (headless Chromium)", () => {
   let h;
   let main;
 

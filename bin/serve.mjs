@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-"use strict";
-
 /**
  * Interactive / serve mode (primary).
  *
@@ -23,15 +21,15 @@
  *
  * The `id` correlates request/response and prevents reprocessing the same file.
  *
- * Usage: node bin/serve.js [--session-dir <path>] [--cdp-port <n>]
+ * Usage: node bin/serve.mjs [--session-dir <path>] [--cdp-port <n>]
  *                          [--start-url <url>] [--overwrite-conflicts]
  */
 
-const fs = require("node:fs");
-const path = require("node:path");
+import fs from "node:fs";
+import path from "node:path";
 
-const { Session } = require("../src/session");
-const { parseArgs } = require("./argv");
+import { Session } from "../src/session.mjs";
+import { parseArgs } from "./argv.mjs";
 
 async function main() {
   const overrides = parseArgs(process.argv.slice(2));

@@ -1,17 +1,15 @@
-"use strict";
-
 /**
  * Diagnostic: connects a second CDP client to an already-running Teams host
  * (default port 9222, e.g. one held open by serve mode) and dumps every target
  * with its LIVE url/title, plus an app-bar probe for each page target. Use this
  * to see why the main-window (app bar) detection isn't matching.
  *
- * Usage: node examples/debug-appbar.js [--cdp-port 9222]
+ * Usage: node examples/debug-appbar.mjs [--cdp-port 9222]
  */
 
-const { CdpSession } = require("../src/cdpSession");
-const { CdpTarget } = require("../src/cdpTarget");
-const { ConsoleMonitor } = require("../src/consoleMonitor");
+import { CdpSession } from "../src/cdp-session.mjs";
+import { CdpTarget } from "../src/cdp-target.mjs";
+import { ConsoleMonitor } from "../src/console-monitor.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

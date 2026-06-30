@@ -1,8 +1,7 @@
-"use strict";
-
-const http = require("node:http");
-const net = require("node:net");
-const WebSocket = require("ws");
+import http from "node:http";
+import net from "node:net";
+// Uses Node's built-in global WebSocket (stable in Node 22+, verified Node 24) —
+// no `ws` dependency, matching the zero-install Teams skill-script convention.
 
 /**
  * Strongly-typed wrapper over a single browser-level Chromium DevTools Protocol
@@ -13,17 +12,18 @@ const WebSocket = require("ws");
  * screenshots, and console all flow through here (see CdpTarget for the page
  * abstraction). Replaces /json/list polling, per-worker sockets, and reconnects.
  *
- * Methods are typed via playwright-core's bundled protocol definitions so we
- * never scatter bare-string `send("Some.method")` calls.
+ * Method names and params are raw CDP strings (see the DevTools Protocol docs at
+ * https://chromedevtools.github.io/devtools-protocol/); the loose `Protocol`
+ * typedef below keeps the JSDoc valid without a playwright-core dependency.
  *
- * @typedef {import("playwright-core/types/protocol").Protocol} Protocol
+ * @typedef {Record<string, any>} Protocol
  */
 class CdpSession {
   /**
    * @param {object} config { cdpPort, cdpConnectTimeoutMs }
    * @param {object} [deps]
-   * @param {import("./consoleMonitor").ConsoleMonitor} [deps.consoleMonitor]
-   * @param {import("./logger").Logger} [deps.logger]
+   * @param {import("./console-monitor.mjs").ConsoleMonitor} [deps.consoleMonitor]
+   * @param {import("./logger.mjs").Logger} [deps.logger]
    */
   constructor(config, { consoleMonitor, logger } = {}) {
     this.config = config;
@@ -52,11 +52,11 @@ class CdpSession {
     await this._waitForPort();
     const url = await this._browserWsUrl();
     await new Promise((resolve, reject) => {
-      this.ws = new WebSocket(url, { perMessageDeflate: false, maxPayload: 256 * 1024 * 1024 });
-      this.ws.once("open", resolve);
-      this.ws.once("error", reject);
+      this.ws = new WebSocket(url);
+      this.ws.addEventListener("open", resolve, { once: true });
+      this.ws.addEventListener("error", reject, { once: true });
     });
-    this.ws.on("message", raw => this._onMessage(raw));
+    this.ws.addEventListener("message", ev => this._onMessage(ev.data));
     await this.setAutoAttach();
     // Auto-attach events alone are not enough: during WebView2 startup the real
     // content window's target churns (attaches then immediately detaches), and
@@ -181,7 +181,15 @@ class CdpSession {
         resolve: v => (clearTimeout(timer), resolve(v)),
         reject: e => (clearTimeout(timer), reject(e)),
       });
-      this.ws.send(JSON.stringify(msg), err => err && reject(err));
+      // Global WebSocket.send takes no callback; it throws synchronously if the
+      // socket isn't open, so surface that as a rejection.
+      try {
+        this.ws.send(JSON.stringify(msg));
+      } catch (err) {
+        clearTimeout(timer);
+        this._pending.delete(id);
+        reject(err);
+      }
     });
   }
 
@@ -232,7 +240,7 @@ class CdpSession {
   _onMessage(raw) {
     let m;
     try {
-      m = JSON.parse(raw.toString());
+      m = JSON.parse(typeof raw === "string" ? raw : raw.toString());
     } catch {
       return;
     }
@@ -356,4 +364,4 @@ function argsText(args) {
     .join(" ");
 }
 
-module.exports = { CdpSession };
+export { CdpSession };

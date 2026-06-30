@@ -1,21 +1,19 @@
-"use strict";
-
 /**
  * Step-by-step driver for serve mode.
  *
- * Sends ONE step to a running `node bin/serve.js` session (via its
+ * Sends ONE step to a running `node bin/serve.mjs` session (via its
  * request.json/response.json file protocol), prints the observation, and — if
  * the step succeeded — appends it to a steps document you build up incrementally.
  * This lets you confirm each interaction against the live Teams host before
  * committing it to an example/repro.
  *
  * Prereq: serve mode is already running and "ready":
- *   node bin/serve.js            (in another terminal; status.json must say ready)
+ *   node bin/serve.mjs           (in another terminal; status.json must say ready)
  *
  * Usage:
- *   node examples/drive.js --step '{"op":"evaluate","expression":"document.title"}'
- *   node examples/drive.js --op click --selector "[aria-label=\"Calendar\"]"
- *   node examples/drive.js --op waitForText --text "Meet now" --save examples/built.json
+ *   node examples/drive.mjs --step '{"op":"evaluate","expression":"document.title"}'
+ *   node examples/drive.mjs --op click --selector "[aria-label=\"Calendar\"]"
+ *   node examples/drive.mjs --op waitForText --text "Meet now" --save examples/built.json
  *
  * Flags:
  *   --step <json>        Full step object as JSON (takes precedence).
@@ -27,8 +25,8 @@
  *   --dom / --screenshot Ask serve for a DOM snapshot / screenshot in the result.
  */
 
-const fs = require("node:fs");
-const path = require("node:path");
+import fs from "node:fs";
+import path from "node:path";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -81,7 +79,7 @@ async function main() {
 
   const status = readJson(statusPath);
   if (!status || status.state !== "ready") {
-    throw new Error(`serve session not ready (status: ${status ? status.state : "missing"}). Start: node bin/serve.js`);
+    throw new Error(`serve session not ready (status: ${status ? status.state : "missing"}). Start: node bin/serve.mjs`);
   }
 
   const step = buildStep(o);

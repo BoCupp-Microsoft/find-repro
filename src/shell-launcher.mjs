@@ -1,12 +1,10 @@
-"use strict";
-
-const fs = require("node:fs");
-const net = require("node:net");
-const childProcess = require("node:child_process");
+import fs from "node:fs";
+import net from "node:net";
+import childProcess from "node:child_process";
 
 /**
  * Launches ms-teams.exe so that its underlying WebView2/Chromium exposes a CDP
- * endpoint Playwright can attach to.
+ * endpoint our CdpSession can attach to.
  *
  * WebView2 reads extra browser flags from WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS,
  * which is how we open the remote-debugging port.
@@ -22,8 +20,8 @@ class ShellLauncher {
   /**
    * @param {object} config
    * @param {object} [deps]
-   * @param {import("./logger").Logger} [deps.logger]
-   * @param {import("./consoleMonitor").ConsoleMonitor} [deps.consoleMonitor]
+   * @param {import("./logger.mjs").Logger} [deps.logger]
+   * @param {import("./console-monitor.mjs").ConsoleMonitor} [deps.consoleMonitor]
    */
   constructor(config, { logger, consoleMonitor } = {}) {
     this.config = config;
@@ -187,4 +185,4 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = { ShellLauncher };
+export { ShellLauncher };

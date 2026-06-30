@@ -1,19 +1,17 @@
-"use strict";
-
 /**
- * Exercises every CdpTarget operation against headless Edge: element lookup
+ * Exercises every CdpTarget operation against headless Chromium: element lookup
  * (selector / testId / text), waitFor, click, hover, fill, type, press,
  * selectOption, evaluate, title/url/content, screenshot, and navigate. Operation
  * effects are asserted by reading window.__events (recorded by the fixture), so
  * each assertion proves the action actually reached the DOM.
  */
 
-const { test, before, after, describe } = require("node:test");
-const assert = require("node:assert");
+import { test, before, after, describe } from "node:test";
+import assert from "node:assert";
 
-const { launch, waitFor } = require("./helpers/harness");
+import { launch, waitFor } from "./helpers/harness.mjs";
 
-describe("CdpTarget operations (headless Edge)", () => {
+describe("CdpTarget operations (headless Chromium)", () => {
   let h;
   let target;
 

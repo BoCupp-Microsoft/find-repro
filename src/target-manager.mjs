@@ -1,6 +1,4 @@
-"use strict";
-
-const { CdpTarget } = require("./cdpTarget");
+import { CdpTarget } from "./cdp-target.mjs";
 
 /**
  * Selects which CDP target subsequent steps act on. Everything is raw CDP — the
@@ -14,10 +12,10 @@ const { CdpTarget } = require("./cdpTarget");
  */
 class TargetManager {
   /**
-   * @param {import("./cdpSession").CdpSession} cdp
+   * @param {import("./cdp-session.mjs").CdpSession} cdp
    * @param {object} config
    * @param {object} [deps]
-   * @param {import("./logger").Logger} [deps.logger]
+   * @param {import("./logger.mjs").Logger} [deps.logger]
    */
   constructor(cdp, config, { logger } = {}) {
     this.cdp = cdp;
@@ -151,4 +149,4 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-module.exports = { TargetManager };
+export { TargetManager };

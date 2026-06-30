@@ -1,7 +1,5 @@
-"use strict";
-
-const fs = require("node:fs");
-const path = require("node:path");
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * Executes a single step against the active (or an explicitly targeted) window.
@@ -15,10 +13,10 @@ const path = require("node:path");
 class StepRunner {
   /**
    * @param {object} deps
-   * @param {import("./targetManager").TargetManager} deps.targetManager
-   * @param {import("./cdpSession").CdpSession} deps.cdp
+   * @param {import("./target-manager.mjs").TargetManager} deps.targetManager
+   * @param {import("./cdp-session.mjs").CdpSession} deps.cdp
    * @param {object} deps.config
-   * @param {import("./logger").Logger} [deps.logger]
+   * @param {import("./logger.mjs").Logger} [deps.logger]
    */
   constructor({ targetManager, cdp, config, logger }) {
     this.targetManager = targetManager;
@@ -153,4 +151,4 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-module.exports = { StepRunner };
+export { StepRunner };

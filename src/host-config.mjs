@@ -1,23 +1,24 @@
-"use strict";
-
-const fs = require("node:fs");
-const path = require("node:path");
-const readline = require("node:readline");
+import fs from "node:fs";
+import path from "node:path";
+import readline from "node:readline";
 
 /**
- * Ensures the Teams host configuration.json contains the keys required to run
- * against locally-built web code, while preserving everything else.
+ * Manages the Teams host's on-disk `configuration.json` — ensures it contains
+ * the keys required to run against locally-built web code, while preserving
+ * everything else. Distinct from settings.mjs, which holds the driver's own
+ * in-memory settings (this manager *consumes* settings.requiredConfig /
+ * settings.configJsonPath to write that external file).
  *
  * Merge policy:
  *   - missing keys are added silently;
  *   - a key whose value differs is a *conflict*: prompt to overwrite when a TTY
  *     is available, otherwise honour config.overwriteConflicts (default false).
  */
-class ConfigurationManager {
+class HostConfigManager {
   /**
    * @param {object} config
    * @param {object} [deps]
-   * @param {import("./logger").Logger} [deps.logger]
+   * @param {import("./logger.mjs").Logger} [deps.logger]
    * @param {(question: string) => Promise<boolean>} [deps.promptYesNo]
    */
   constructor(config, { logger, promptYesNo } = {}) {
@@ -158,4 +159,4 @@ function defaultPromptYesNo(question, logger) {
   });
 }
 
-module.exports = { ConfigurationManager, defaultPromptYesNo };
+export { HostConfigManager, defaultPromptYesNo };

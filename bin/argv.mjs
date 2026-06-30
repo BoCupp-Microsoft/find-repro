@@ -1,8 +1,6 @@
-"use strict";
-
 /**
  * Minimal CLI arg parser shared by the bin entry points. Translates flags into
- * Session config overrides (see src/config.js).
+ * Session settings overrides (see src/settings.mjs).
  *
  *   --session-dir <path>     -> sessionDir
  *   --cdp-port <n>           -> cdpPort
@@ -48,4 +46,4 @@ function parseArgs(argv) {
   return overrides;
 }
 
-module.exports = { parseArgs };
+export { parseArgs };

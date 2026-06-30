@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Tiny timestamped logger. Everything goes to stderr so that stdout can stay
  * reserved for structured machine-readable output when a bin entry point needs
@@ -52,4 +50,4 @@ function safeStringify(value) {
 
 const defaultLogger = new Logger();
 
-module.exports = { Logger, defaultLogger };
+export { Logger, defaultLogger };

@@ -1,12 +1,10 @@
-"use strict";
-
 /**
  * A page-like abstraction over a single CDP target session (page or iframe). All
  * DOM work is done via Runtime.evaluate — no Playwright. StepRunner searches a
  * window's page target plus iframe targets, so each CdpTarget only needs to act
  * on its own document.
  *
- * @typedef {import("./cdpSession").CdpSession} CdpSession
+ * @typedef {import("./cdp-session.mjs").CdpSession} CdpSession
  */
 class CdpTarget {
   /**
@@ -228,4 +226,4 @@ async function safe(fn, fallback) {
   }
 }
 
-module.exports = { CdpTarget };
+export { CdpTarget };

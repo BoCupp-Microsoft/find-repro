@@ -55,7 +55,7 @@ pattern.
 
 Read `README.md` for the full contract. Operationally:
 
-- Boot once: `node bin/serve.js --session-dir <dir>` (default `<dir>` is `.\.session`).
+- Boot once: `node bin/serve.mjs --session-dir <dir>` (default `<dir>` is `.\.session`).
   Cold start of the debug host is ~30–60s. Add `--kill-existing` if a non-debug Teams is
   already running; `--no-reuse` to force a fresh launch.
 - Poll `<dir>\status.json` until `state` is `ready` (or `error`).
@@ -216,7 +216,7 @@ Keep the **shortest** sequence that still emits the error. Record it as `minimum
   the detection `expectation` in `options`).
 - Validate with a clean batch run, repeated (default **3×** for a deterministic repro; use
   **more** repeats — e.g. 5–10 — for an intermittent/race repro to measure stability):
-  `node bin/run.js --steps repros/<slug>/steps.json --kill-existing`
+  `node bin/run.mjs --steps repros/<slug>/steps.json --kill-existing`
 - Record the observed **hit rate** in the artifact (`validation.runs` / `validation.passed`).
   A deterministic repro should be N/N. An **intermittent** repro that fires on some runs is
   still a valid `reproduced` result — record it as such, set `validation.flaky: true`, and note

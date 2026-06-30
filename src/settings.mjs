@@ -1,16 +1,16 @@
-"use strict";
-
 /**
- * Central configuration for the find-repro driver.
+ * Central settings for the find-repro driver — the in-memory knobs (ports,
+ * timeouts, paths, selectors) consumed across the codebase. Distinct from
+ * host-config.mjs, which provisions the Teams host's on-disk configuration.json.
  *
  * All values can be overridden via the `overrides` object (e.g. parsed from CLI
  * args by the bin entry points) or a handful of environment variables. Paths
  * default to the standard Teams dev-box layout described in the project plan.
  */
 
-const os = require("node:os");
-const path = require("node:path");
-const fs = require("node:fs");
+import os from "node:os";
+import path from "node:path";
+import fs from "node:fs";
 
 function getLocalAppData() {
   return (
@@ -72,11 +72,11 @@ function safeReaddir(dir) {
 }
 
 /**
- * Builds a frozen configuration object.
+ * Builds a frozen settings object.
  * @param {object} [overrides] Partial values that take precedence over defaults.
  * @returns {Readonly<object>}
  */
-function createConfig(overrides = {}) {
+function createSettings(overrides = {}) {
   const localAppData = getLocalAppData();
 
   const startUrl =
@@ -182,4 +182,4 @@ function createConfig(overrides = {}) {
   return Object.freeze(merged);
 }
 
-module.exports = { createConfig, getLocalAppData };
+export { createSettings, getLocalAppData };
