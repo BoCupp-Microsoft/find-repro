@@ -34,7 +34,7 @@ import { parseArgs } from "./argv.mjs";
 async function main() {
   const overrides = parseArgs(process.argv.slice(2));
   const session = new Session(overrides);
-  const sessionDir = session.config.sessionDir;
+  const sessionDir = session.settings.sessionDir;
   fs.mkdirSync(sessionDir, { recursive: true });
 
   const statusPath = path.join(sessionDir, "status.json");
@@ -92,7 +92,7 @@ async function main() {
         writeJson(responsePath, { id: request.id, status: "error", error: err.message });
       }
     }
-    await sleep(session.config.requestPollIntervalMs);
+    await sleep(session.settings.requestPollIntervalMs);
   }
 }
 

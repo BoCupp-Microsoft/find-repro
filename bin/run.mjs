@@ -38,7 +38,7 @@ async function main() {
 
   const session = new Session(overrides);
   const outPath =
-    flags.out || path.join(session.config.sessionDir, "result.json");
+    flags.out || path.join(session.settings.sessionDir, "result.json");
 
   let result;
   try {
@@ -61,7 +61,7 @@ async function main() {
   if (flags.keepOpen) {
     // Host is intentionally left running; exit now so the held CDP socket
     // doesn't keep the process alive.
-    process.stderr.write(`host left running (--keep-open); CDP on port ${session.config.cdpPort}\n`);
+    process.stderr.write(`host left running (--keep-open); CDP on port ${session.settings.cdpPort}\n`);
     process.exit(code);
   }
   process.exitCode = code;
