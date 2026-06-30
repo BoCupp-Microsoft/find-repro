@@ -22,9 +22,9 @@ class ConsoleMonitor {
   }
 
   _push(entry) {
-    // De-duplicate identical messages delivered within a short window. This
-    // happens when more than one CDP connection is briefly attached to the same
-    // page (e.g. right after a reconnect to surface a newly opened window).
+    // De-duplicate identical messages delivered within a short window. Kept as a
+    // safety net even though page (Playwright) and worker (CDP) capture paths are
+    // now disjoint and shouldn't double-deliver.
     if (entry.source === "console" || entry.source === "pageerror") {
       const key = `${entry.source}|${entry.level}|${entry.page && entry.page.url}|${entry.text}`;
       const now = Date.now();
@@ -75,14 +75,15 @@ class ConsoleMonitor {
   }
 
   /**
-   * Ingests a console message from a Web Worker target (captured via CDP).
-   * @param {string} worker Worker name (e.g. precompiled-web-worker-*.js)
+   * Ingests a console message from a non-page CDP target (a Web Worker, etc.),
+   * captured via the browser CDP session. Pages are captured via attach().
+   * @param {string} target Target name (e.g. precompiled-web-worker-*.js)
    * @param {string} level console type / log level
    * @param {string} text message text
    */
-  ingestWorker(worker, level, text) {
+  ingestTarget(target, level, text) {
     if (text == null || text === "") return;
-    this._push({ source: "worker", level: level || "log", text, page: { url: worker } });
+    this._push({ source: "worker", level: level || "log", text, page: { url: target } });
   }
 
   /**

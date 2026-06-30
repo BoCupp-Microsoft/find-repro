@@ -1,0 +1,60 @@
+{
+  "options": {
+    "continueOnError": false
+  },
+  "steps": [
+    {
+      "op": "sleep",
+      "ms": 15000,
+      "comment": "COLD-START APP SETTLE (not an element wait). The session reports 'ready' when the left rail is interactive, but the Teams SPA is still initializing its app hosts. Navigating to Calendar before that settles makes the calendar iframe load unstably and DETACH permanently, so 'Meet now' never appears. This is the only remaining fixed wait; the per-element waits below are event-based (actionability), not sleeps. See README 'Actionability' for how to remove this too (retry-on-detach)."
+    },
+    {
+      "op": "click",
+      "selector": "[aria-label=\"Calendar\"]",
+      "timeoutMs": 30000
+    },
+    {
+      "op": "waitForText",
+      "text": "Meet now",
+      "state": "actionable",
+      "timeoutMs": 60000,
+      "comment": "Wait until 'Meet now' is genuinely clickable (visible, in-viewport, un-occluded, enabled) in the Calendar app iframe — not merely present in the DOM. Replaces the old sleep()+double-wait."
+    },
+    {
+      "op": "click",
+      "selector": "[aria-label=\"Start an instant Teams meeting.\"]",
+      "timeoutMs": 60000,
+      "comment": "'Meet now'. Click waits for actionability + a stable hit point, then dispatches a real CDP Input click. Opens the pre-join flyout."
+    },
+    {
+      "op": "click",
+      "text": "Start meeting",
+      "timeoutMs": 30000,
+      "comment": "Confirms the instant meeting; opens a separate 'Meeting join' pre-join window."
+    },
+    {
+      "op": "switchTarget",
+      "titlePrefix": "Meeting join",
+      "timeoutMs": 30000,
+      "comment": "Make the new pre-join window the active target."
+    },
+    {
+      "op": "click",
+      "testId": "prejoin-join-button",
+      "timeoutMs": 30000,
+      "comment": "'Join now' (data-tid=prejoin-join-button) — actually enters the meeting."
+    },
+    {
+      "op": "click",
+      "testId": "share_meeting_invite_dialog_dismiss_button",
+      "timeoutMs": 30000,
+      "comment": "Dismiss the 'Invite people to join you' dialog."
+    },
+    {
+      "op": "click",
+      "testId": "hangup-main-btn",
+      "timeoutMs": 30000,
+      "comment": "Leave the meeting (aria-label 'Leave'). A call-quality rating dialog (data-tid=cqf-dismiss-button) may appear briefly and the meeting window then closes on its own."
+    }
+  ]
+}

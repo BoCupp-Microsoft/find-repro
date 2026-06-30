@@ -158,12 +158,15 @@ function createConfig(overrides = {}) {
     // How often to log seen targets while waiting for the main window.
     mainWindowReportIntervalMs: 5000,
     targetPollIntervalMs: 1000,
+    // How often the long-lived CDP session reconciles its tracked targets
+    // against Target.getTargets() to recover windows missed by auto-attach.
+    targetReconcileIntervalMs: 1500,
     switchTargetTimeoutMs: 30000,
     stepTimeoutMs: 30000,
     // Interactive serve loop poll interval for new request files.
     requestPollIntervalMs: 250,
-    // How often to scan for new Web Worker targets to attach console capture to.
-    workerPollIntervalMs: 3000,
+    // Per-command CDP timeout so a stuck target session can't stall polling.
+    cdpCommandTimeoutMs: 10000,
   };
 
   const merged = { ...defaults, ...overrides };

@@ -1,6 +1,6 @@
 ---
 name: find-repro
-description: 'Use when the user provides a raw error-message string emitted from the Teams codebase (teams-modular-packages or teams-client-native-shell) and wants to reproduce it in the running product. Locates the error source, determines emit conditions and callers, forms hypotheses, then drives the find-repro Playwright infrastructure in serve mode to reproduce the error, reduce it to a minimum repro, validate it, and emit a handoff artifact for a downstream fix skill. Drives the locally-built Teams WebView2 host via CDP. Not for unit tests or for producing fixes.'
+description: 'Use when the user provides a raw error-message string emitted from the Teams codebase (teams-modular-packages or teams-client-native-shell) and wants to reproduce it in the running product. Locates the error source, determines emit conditions and callers, forms hypotheses, then drives the find-repro CDP infrastructure in serve mode to reproduce the error, reduce it to a minimum repro, validate it, and emit a handoff artifact for a downstream fix skill. Drives the locally-built Teams WebView2 host via CDP. Not for unit tests or for producing fixes.'
 argument-hint: 'Paste the raw error message string (exactly as emitted in the console/telemetry) that you want reproduced.'
 ---
 
@@ -10,7 +10,7 @@ argument-hint: 'Paste the raw error message string (exactly as emitted in the co
 
 Given **one raw error-message string** emitted from the Teams codebase, **do whatever it takes**
 (short of unsafe actions — see Constraints) to reproduce that error in the running Teams desktop
-client by driving the **`find-repro` Playwright infrastructure** (this repo) in **serve mode**,
+client by driving the **`find-repro` CDP infrastructure** (this repo) in **serve mode**,
 reduce the interaction to a **minimum repro**, validate it, and write a **handoff artifact** that
 a downstream fix skill can consume.
 
@@ -49,7 +49,7 @@ pattern.
 - This infra repo: `Q:\src\find-repro` (run all `node bin/...` commands from here).
 - The web dev server is **already running** at `https://local.teams.office.com/v2/?skipauthstrap=1`
   and is **managed by the dev** — never start it; the infra only checks reachability.
-- Node is available; `playwright-core` is installed under `find-repro\node_modules`.
+- Node is available; `ws` is installed under `find-repro\node_modules`.
 
 ## The engine: find-repro serve mode
 
@@ -99,8 +99,8 @@ optional `target`/`frameUrlIncludes` to scope it.
   dialog X has `title="Close"` and `data-tid="share_meeting_invite_dialog_dismiss_button"`;
   Leave = `data-tid="hangup-main-btn"`.
 - **New windows may share the same URL** (e.g. the Meet now pre-join window shares the
-  Calendar URL). Use `switchTarget` with `titlePrefix`/`selector`/`urlIncludes`; it reconnects
-  to surface windows opened after boot and makes the match the active page.
+  Calendar URL). Use `switchTarget` with `titlePrefix`/`selector`/`urlIncludes`; auto-attach
+  surfaces windows opened after boot and the match becomes the active page.
 - **Readiness** already means "left rail populated with real app buttons", not just the
   wrapper existing — so a `ready` status is safe to click against.
 - Reference flow: `confirmed/meet-now.steps.json` (Calendar → Meet now → Start meeting →

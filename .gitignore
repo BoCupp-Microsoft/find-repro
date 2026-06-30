@@ -1,4 +1,4 @@
 node_modules/
 .session/
-repros/
+repros/*/
 *.log

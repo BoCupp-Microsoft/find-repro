@@ -4,35 +4,29 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 /**
- * Executes a single step against the active (or an explicitly targeted) page.
+ * Executes a single step against the active (or an explicitly targeted) window.
+ * Pure CDP — every op runs via a CdpTarget (Runtime.evaluate / Input / Page).
+ * Selector ops search the window's page target AND iframe targets, because Teams
+ * renders apps (Calendar, Meet, ...) inside iframes that are separate CDP targets.
  *
- * Supported operations (step.op):
- *   click | fill | type | press | hover | selectOption | goto | evaluate |
- *   waitForSelector | waitForText | sleep | screenshot | domSnapshot | switchTarget
- *
- * A step may include `target` ({ selector?, titlePrefix?, urlIncludes? }) to run
- * against a page other than the active one (without changing the active page).
- * Use the `switchTarget` op to permanently change the active page.
+ * Ops: click | fill | type | press | hover | selectOption | goto | evaluate |
+ *      waitForSelector | waitForText | sleep | screenshot | domSnapshot | switchTarget
  */
 class StepRunner {
   /**
    * @param {object} deps
    * @param {import("./targetManager").TargetManager} deps.targetManager
-   * @param {import("./consoleMonitor").ConsoleMonitor} deps.consoleMonitor
+   * @param {import("./cdpSession").CdpSession} deps.cdp
    * @param {object} deps.config
    * @param {import("./logger").Logger} [deps.logger]
    */
-  constructor({ targetManager, consoleMonitor, config, logger }) {
+  constructor({ targetManager, cdp, config, logger }) {
     this.targetManager = targetManager;
-    this.consoleMonitor = consoleMonitor;
+    this.cdp = cdp;
     this.config = config;
     this.logger = logger;
   }
 
-  /**
-   * @param {object} step
-   * @returns {Promise<{status:string, error?:string, data?:any}>}
-   */
   async run(step) {
     if (!step || typeof step.op !== "string") {
       return { status: "error", error: "step must have a string 'op'" };
@@ -49,185 +43,114 @@ class StepRunner {
 
   async _dispatch(step, timeout) {
     switch (step.op) {
-      case "switchTarget": {
+      case "switchTarget":
         return this.targetManager.switchTarget({
           selector: step.selector,
           titlePrefix: step.titlePrefix,
           urlIncludes: step.urlIncludes,
           timeoutMs: step.timeoutMs,
         });
-      }
-      case "sleep": {
+      case "sleep":
         await sleep(step.ms ?? 0);
         return undefined;
-      }
     }
 
     const page = await this.targetManager.resolvePage(step.target);
+    const spec = locatorSpec(step);
 
     switch (step.op) {
       case "click":
-        await (await this._locator(page, step, timeout)).click({ timeout });
+        await this._actAcrossFrames(page, spec, t => t.click(spec, { timeout }), timeout, "actionable");
         return undefined;
       case "hover":
-        await (await this._locator(page, step, timeout)).hover({ timeout });
+        await this._actAcrossFrames(page, spec, t => t.hover(spec, { timeout }), timeout, "actionable");
         return undefined;
       case "fill":
-        await (await this._locator(page, step, timeout)).fill(String(step.value ?? ""), { timeout });
+        await this._actAcrossFrames(page, spec, t => t.fill(spec, String(step.value ?? "")), timeout);
         return undefined;
       case "type":
-        await (await this._locator(page, step, timeout)).pressSequentially(String(step.value ?? ""), { timeout });
+        await this._actAcrossFrames(page, spec, t => t.type(spec, String(step.value ?? "")), timeout);
         return undefined;
       case "press":
-        if (hasLocatorTarget(step)) {
-          await (await this._locator(page, step, timeout)).press(step.key, { timeout });
-        } else {
-          await page.keyboard.press(step.key);
-        }
+        if (spec) await this._actAcrossFrames(page, spec, t => t.press(step.key, spec), timeout);
+        else await page.press(step.key);
         return undefined;
-      case "selectOption": {
-        const result = await (await this._locator(page, step, timeout)).selectOption(step.value, { timeout });
-        return { selected: result };
-      }
-      case "goto": {
-        const resp = await page.goto(step.url, { timeout, waitUntil: step.waitUntil || "load" });
-        return { url: page.url(), status: resp ? resp.status() : null };
-      }
-      case "evaluate": {
-        const result = await page.evaluate(step.expression);
-        return { result };
-      }
+      case "selectOption":
+        await this._actAcrossFrames(page, spec, t => t.selectOption(spec, step.value), timeout);
+        return { selected: step.value };
+      case "goto":
+        await page.navigate(step.url);
+        return { url: await page.url() };
+      case "evaluate":
+        return { result: await page.evaluate(step.expression) };
       case "waitForSelector": {
-        const { frame } = await this._waitAcrossFrames(
-          page,
-          root => root.locator(step.selector).first(),
-          step.state || "visible",
-          timeout
-        );
-        return { frameUrl: frame.url() };
+        const t = await this._waitAcrossFrames(page, { selector: step.selector }, waitState(step), timeout);
+        return { frameUrl: await t.url() };
       }
-      case "waitForText": {
-        await this._waitAcrossFrames(
-          page,
-          root =>
-            root
-              .getByText(step.text, step.exact != null ? { exact: step.exact } : undefined)
-              .first(),
-          "visible",
-          timeout
-        );
+      case "waitForText":
+        await this._waitAcrossFrames(page, { text: step.text, exact: step.exact }, waitState(step), timeout);
         return undefined;
-      }
-      case "screenshot": {
-        const file = await this._screenshot(page, step);
-        return { path: file };
-      }
-      case "domSnapshot": {
-        const html = await this._domSnapshot(page, step, timeout);
-        return { html };
-      }
+      case "screenshot":
+        return { path: await this._screenshot(page, step) };
+      case "domSnapshot":
+        return { html: await page.content() };
       default:
         throw new Error(`unknown op '${step.op}'`);
     }
   }
 
-  /** Builds a locator from a step spec against a page or frame root. */
-  _makeLocator(root, step) {
-    if (step.selector) return root.locator(step.selector).first();
-    if (step.testId) return root.getByTestId(step.testId).first();
-    if (step.text) {
-      return root
-        .getByText(step.text, step.exact != null ? { exact: step.exact } : undefined)
-        .first();
-    }
-    throw new Error(`step '${step.op}' requires one of: selector, testId, text`);
+  /** Frames to search: the page target + all iframe targets. */
+  _frames() {
+    return this.targetManager.allTargets();
   }
 
-  /**
-   * Resolves a locator for the step, searching the main frame AND child frames.
-   * Teams renders apps (Calendar, Meet, ...) inside iframes, so main-frame-only
-   * lookups miss those controls. Returns a locator bound to the first frame that
-   * contains a match. If `step.frameUrlIncludes` is set, only frames whose URL
-   * contains that substring are considered.
-   */
-  async _locator(page, step, timeout) {
+  /** Waits for spec to reach `state` in the page or any iframe, returns that
+   *  target. state: "attached" | "visible" (default) | "actionable". */
+  async _waitAcrossFrames(page, spec, state, timeout) {
     const deadline = Date.now() + timeout;
     for (;;) {
-      const frames = this._candidateFrames(page, step);
-      for (const frame of frames) {
+      for (const t of this._frames()) {
         try {
-          const loc = this._makeLocator(frame, step);
-          if ((await loc.count()) > 0) return loc;
+          if (await t.waitFor(spec, { state, timeout: 200 })) return t;
         } catch {
-          /* frame detached/cross-origin; skip */
+          /* frame gone */
         }
       }
-      if (Date.now() > deadline) {
-        // Fall back to a main-frame locator so the caller's action surfaces a
-        // standard Playwright timeout error with its call log.
-        return this._makeLocator(page, step);
-      }
+      if (Date.now() > deadline) throw new Error(`not found within ${timeout}ms (state=${state}): ${JSON.stringify(spec)}`);
       await sleep(150);
     }
   }
 
-  /** Waits for a locator (built by `build`) to reach `state` in any frame. */
-  async _waitAcrossFrames(page, build, state, timeout) {
-    const deadline = Date.now() + timeout;
-    let lastErr;
-    for (;;) {
-      for (const frame of page.frames()) {
-        try {
-          const loc = build(frame);
-          if ((await loc.count()) > 0) {
-            await loc.waitFor({ state, timeout: Math.max(500, deadline - Date.now()) });
-            return { frame, locator: loc };
-          }
-        } catch (e) {
-          lastErr = e;
-        }
-      }
-      if (Date.now() > deadline) {
-        throw lastErr || new Error("waitAcrossFrames: not found within timeout");
-      }
-      await sleep(150);
-    }
-  }
-
-  /** Frames to search, optionally filtered by step.frameUrlIncludes. */
-  _candidateFrames(page, step) {
-    const frames = page.frames();
-    if (step.frameUrlIncludes) {
-      return frames.filter(f => (f.url() || "").includes(step.frameUrlIncludes));
-    }
-    return frames;
+  /** Finds the first frame where spec reaches `state`, then runs the action. */
+  async _actAcrossFrames(page, spec, action, timeout, state = "visible") {
+    const t = await this._waitAcrossFrames(page, spec, state, timeout);
+    await action(t);
   }
 
   async _screenshot(page, step) {
     const dir = path.join(this.config.sessionDir, "screenshots");
     fs.mkdirSync(dir, { recursive: true });
-    const name = step.path
-      ? step.path
-      : path.join(dir, `shot-${Date.now()}.png`);
-    await page.screenshot({ path: name, fullPage: Boolean(step.fullPage) });
-    return name;
-  }
-
-  async _domSnapshot(page, step, timeout) {
-    if (step.selector) {
-      const el = await page.waitForSelector(step.selector, { timeout });
-      return el.evaluate(node => node.outerHTML);
-    }
-    return page.content();
+    const file = step.path || path.join(dir, `shot-${Date.now()}.png`);
+    fs.writeFileSync(file, await page.screenshot());
+    return file;
   }
 }
 
-function hasLocatorTarget(step) {
-  return Boolean(step.selector || step.testId || step.text);
+function locatorSpec(step) {
+  if (step.selector) return { selector: step.selector };
+  if (step.testId) return { testId: step.testId };
+  if (step.text) return { text: step.text, exact: step.exact };
+  return null;
+}
+
+/** Wait state for waitForSelector/waitForText: "attached" | "visible" (default)
+ *  | "actionable" (gated on a human being able to click it). */
+function waitState(step) {
+  return step.state === "attached" || step.state === "actionable" ? step.state : "visible";
 }
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(r => setTimeout(r, ms));
 }
 
 module.exports = { StepRunner };

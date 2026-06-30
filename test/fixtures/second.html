@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>find-repro second window</title>
+</head>
+<body>
+  <h1 id="second-marker">Second Window</h1>
+  <script>
+    window.emitConsole = m => console.log(m);
+    console.log("[TEST] second window loaded");
+    window.__fixtureReady = true;
+  </script>
+</body>
+</html>

@@ -13,11 +13,10 @@
   },
   "scripts": {
     "serve": "node ./bin/serve.js",
-    "run": "node ./bin/run.js"
+    "run": "node ./bin/run.js",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\""
   },
   "dependencies": {
-    "playwright-core": "^1.58.0",
-    "ws": "^8.18.0",
     "ws": "^8.21.0"
   }
 }

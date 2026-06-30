@@ -8,9 +8,8 @@ const { Logger } = require("./logger");
 const { DevServerChecker } = require("./devServer");
 const { ConfigurationManager } = require("./configuration");
 const { ShellLauncher } = require("./shellLauncher");
-const { CdpConnector } = require("./cdp");
+const { CdpSession } = require("./cdpSession");
 const { ConsoleMonitor } = require("./consoleMonitor");
-const { WorkerMonitor } = require("./workerMonitor");
 const { TargetManager } = require("./targetManager");
 const { StepRunner } = require("./stepRunner");
 
@@ -18,7 +17,7 @@ const { StepRunner } = require("./stepRunner");
  * Long-lived, stateful driver session shared by both the interactive (serve)
  * and batch (run) entry points. `start()` performs the full boot sequence and
  * leaves the host running; `runStep`/`runSteps` execute operations and return
- * observations; `shutdown()` tears everything down.
+ * observations; `shutdown()` tears everything down. Pure CDP — no Playwright.
  */
 class Session {
   /**
@@ -39,13 +38,11 @@ class Session {
       logger: this.logger.child("shell"),
       consoleMonitor: this.consoleMonitor,
     });
-    this.cdp = new CdpConnector(this.config, this.logger.child("cdp"));
-    this.workerMonitor = new WorkerMonitor(this.config, {
+    this.cdp = new CdpSession(this.config, {
       consoleMonitor: this.consoleMonitor,
-      logger: this.logger.child("workers"),
+      logger: this.logger.child("cdp"),
     });
 
-    this.browser = null;
     this.targetManager = null;
     this.stepRunner = null;
     this.mainWindow = null;
@@ -73,19 +70,10 @@ class Session {
     }
 
     this.logger.log("connecting over CDP...");
-    this.browser = await this.cdp.connect();
-    this.browser.on("disconnected", () => {
-      if (!this._shuttingDown) this.logger.warn("browser disconnected unexpectedly");
-    });
+    await this.cdp.connect();
 
-    // Capture Web Worker console (CDL / notification-toast / telemetry resolvers
-    // run in separate worker targets that page.on('console') cannot see).
-    this.workerMonitor.start();
-
-    this.targetManager = new TargetManager(this.browser, this.config, {
-      consoleMonitor: this.consoleMonitor,
+    this.targetManager = new TargetManager(this.cdp, this.config, {
       logger: this.logger.child("targets"),
-      reconnect: () => this.reconnect(),
     });
 
     this.logger.log("waiting for main Teams window...");
@@ -94,7 +82,7 @@ class Session {
 
     this.stepRunner = new StepRunner({
       targetManager: this.targetManager,
-      consoleMonitor: this.consoleMonitor,
+      cdp: this.cdp,
       config: this.config,
       logger: this.logger.child("step"),
     });
@@ -113,7 +101,7 @@ class Session {
     const res = await this.stepRunner.run(step);
     const { entries } = this.consoleMonitor.newSince(before);
 
-    const page = this.targetManager.activePage;
+    const page = this.targetManager.active;
     const observation = {
       op: step.op,
       status: res.status,
@@ -124,12 +112,8 @@ class Session {
     };
 
     if (options.wantDom) observation.dom = await safeContent(page);
-    if (options.wantScreenshot) {
-      observation.screenshot = await this._artifactScreenshot(page);
-    }
-    if (options.expectations) {
-      observation.expectations = this.consoleMonitor.evaluate(options.expectations);
-    }
+    if (options.wantScreenshot) observation.screenshot = await this._artifactScreenshot(page);
+    if (options.expectations) observation.expectations = this.consoleMonitor.evaluate(options.expectations);
     return observation;
   }
 
@@ -156,7 +140,7 @@ class Session {
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `obs-${Date.now()}.png`);
     try {
-      await page.screenshot({ path: file });
+      fs.writeFileSync(file, await page.screenshot());
       return file;
     } catch (err) {
       this.logger.warn(`screenshot failed: ${err.message}`);
@@ -164,36 +148,11 @@ class Session {
     }
   }
 
-  /**
-   * Refreshes the Playwright connection so it surfaces windows created after the
-   * initial connect (Playwright's connectOverCDP does not auto-attach to Teams'
-   * later top-level WebView2 windows). The previous connection is left open to
-   * avoid invalidating in-flight page handles; duplicate console delivery is
-   * de-duplicated by the ConsoleMonitor.
-   * @returns {Promise<import("playwright-core").Browser>}
-   */
-  async reconnect() {
-    const fresh = await this.cdp.connectFresh();
-    this.browser = fresh;
-    this.targetManager.browser = fresh;
-    for (const ctx of fresh.contexts()) {
-      ctx.on("page", page => this.consoleMonitor.attach(page));
-      for (const page of ctx.pages()) this.consoleMonitor.attach(page);
-    }
-    this.targetManager.rebindActivePage();
-    return fresh;
-  }
-
-  /** Tears down Playwright and the host process. */
+  /** Tears down the CDP session and the host process. */
   async shutdown() {
     this._shuttingDown = true;
     try {
-      this.workerMonitor.stop();
-    } catch {
-      /* ignore */
-    }
-    try {
-      if (this.browser) await this.browser.close();
+      this.cdp.close();
     } catch {
       /* ignore */
     }
@@ -204,22 +163,7 @@ class Session {
 
 async function pageInfo(page) {
   if (!page) return { title: undefined, url: undefined };
-  let title;
-  try {
-    title = await Promise.race([
-      page.title(),
-      new Promise(resolve => setTimeout(() => resolve(undefined), 2000)),
-    ]);
-  } catch {
-    title = undefined;
-  }
-  let url;
-  try {
-    url = page.url();
-  } catch {
-    url = undefined;
-  }
-  return { title, url };
+  return { title: await page.title(), url: await page.url() };
 }
 
 async function safeContent(page) {

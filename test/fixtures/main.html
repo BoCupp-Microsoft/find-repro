@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>find-repro cdp test page</title>
+</head>
+<body>
+  <div id="known-text">Unique Marker Text</div>
+
+  <button id="btn" data-testid="go-btn" data-tid="go-btn-tid">Click Me</button>
+  <div id="hover">Hover Target</div>
+
+  <input id="fillinput" data-testid="fill-input" />
+  <input id="typeinput" data-testid="type-input" />
+  <input id="keyinput" data-testid="key-input" />
+
+  <select id="sel" data-testid="sel">
+    <option value="a">A</option>
+    <option value="b">B</option>
+    <option value="c">C</option>
+  </select>
+
+  <!-- Opens a real popup window via a (simulated) user click, exercising the
+       new-window auto-attach path the way the product actually opens windows. -->
+  <button id="openwin" data-testid="open-window">Open Window</button>
+
+  <div id="delayed-host"></div>
+
+  <script>
+    // Operation effects are recorded here so tests can read them deterministically
+    // via evaluate(), and also echoed to the console so the ConsoleMonitor path is
+    // exercised at the same time.
+    window.__events = [];
+    function rec(s) {
+      window.__events.push(s);
+      console.log("[EVT] " + s);
+    }
+
+    document.getElementById("btn").addEventListener("click", () => rec("click:btn"));
+    document.getElementById("hover").addEventListener("mouseover", () => rec("hover:hover"));
+    document.getElementById("fillinput").addEventListener("input", e => rec("input:fill=" + e.target.value));
+    document.getElementById("fillinput").addEventListener("change", e => rec("change:fill=" + e.target.value));
+    document.getElementById("typeinput").addEventListener("input", e => rec("input:type=" + e.target.value));
+    document.getElementById("keyinput").addEventListener("keydown", e => rec("keydown:" + e.key));
+    document.getElementById("sel").addEventListener("change", e => rec("change:sel=" + e.target.value));
+    document.getElementById("openwin").addEventListener("click", () => {
+      window.open("/second.html", "_blank");
+      rec("click:openwin");
+    });
+
+    // A delayed element so waitFor() has something that is initially absent.
+    setTimeout(() => {
+      const d = document.createElement("div");
+      d.id = "delayed";
+      d.setAttribute("data-testid", "delayed");
+      d.textContent = "Delayed Element";
+      document.getElementById("delayed-host").appendChild(d);
+    }, 800);
+
+    // A dedicated worker so a worker target exists to enumerate and capture from.
+    try {
+      window.__worker = new Worker("/worker.js");
+      window.__worker.onmessage = e => console.log("[TEST] main<-worker:" + e.data);
+    } catch (err) {
+      console.error("worker create failed: " + err);
+    }
+
+    // On-demand emitters driven by tests via evaluate(). Errors/rejections are
+    // scheduled out of the current task so they surface as genuine uncaught
+    // exceptions / unhandled rejections (Runtime.exceptionThrown), not as a
+    // synchronous throw inside the evaluate call.
+    window.emitConsole = m => console.log(m);
+    window.emitError = m => { setTimeout(() => { throw new Error(m); }, 0); };
+    window.emitRejection = m => { setTimeout(() => { Promise.reject(new Error(m)); }, 0); };
+
+    console.log("[TEST] main page loaded");
+    window.__fixtureReady = true;
+  </script>
+</body>
+</html>
