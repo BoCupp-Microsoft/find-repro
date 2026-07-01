@@ -2,3 +2,5 @@ node_modules/
 .session/
 repros/*/
 *.log
+__pycache__/
+*.py[cod]

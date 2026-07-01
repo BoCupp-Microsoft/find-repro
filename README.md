@@ -245,8 +245,9 @@ examples/  meet-now.json (validated batch flow), request.example.json (serve
            request envelope), drive.mjs (step-by-step serve driver),
            debug-appbar.mjs (target diagnostic)
 confirmed/ validated step sequences (meet-now flow, endEntity repro)
-repros/    skill output: handoff artifacts (SCHEMA.md) + runnable steps
+repros/    skill output: handoff artifacts (SCHEMA.md) + runnable steps + generated <slug>.html report
 .github/skills/find-repro/  the find-repro skill (SKILL.md)
+.github/skills/find-repro/scripts/build-report.py  handoff -> HTML report (needs Pillow)
 ```
 
 ## Skill
@@ -257,6 +258,23 @@ callers, forms hypotheses, then drives this infra in **serve mode** to reproduce
 reduce it to a **minimum repro**, validate it, and write a **handoff artifact** under
 `repros/<slug>/` (schema: `repros/SCHEMA.md`) for a downstream fix skill. A worked example
 lives in `repros/end-entity-chatthread/`.
+
+### Human report
+
+From a handoff artifact, the skill also generates a human-readable, step-by-step HTML report
+(annotated screenshots with red "click" arrows, the action performed, critical callouts, and the
+markers observed at each step with their code context):
+
+```bash
+pip install Pillow   # one-time dependency for the report builder
+python .github/skills/find-repro/scripts/build-report.py --repro repros/<slug>/repro.json
+```
+
+It writes `<slug>.html` (self-contained — images base64-embedded) and `<slug>.linked.html`
+(lightweight — references `evidence/*.png`), named for the repro slug so shared files have unique
+names. The report is a pure projection of `repro.json`, so it
+regenerates identically without re-running the repro. See `repros/required-field-missing/` for a
+worked example.
 
 ### Marker-injection convention
 

@@ -371,8 +371,32 @@ Keep the **shortest** sequence that still emits the error. Record it as `minimum
   pointer, evidence (console lines, screenshots), environment, and `handoffForFix` (suspected
   fix locations + how the fix skill should re-validate: replay `steps.json`; the expectation
   must **no longer** match).
+- **Populate the human-report fields** (all in `repro.json`, all general — see SCHEMA.md): a
+  short `summary[]` (the "how the repro was found" bullets), a `walkthrough[]` (one entry per
+  minimum-repro step the report should show), and enrich `evidence.markersUsed[]` with an `id`
+  and a `codeContext` snippet (a few lines of surrounding source with the marker line included)
+  so the report is self-contained even after markers are reverted. Each `walkthrough` entry
+  carries: `title`, the **raw** `screenshot`, optional `annotation` (the click target), a
+  `comment`, the `input` performed, any `critical[]` callouts, and `markersObserved`
+  (`summary` + the actual `lines` + `markerRefs` into `markersUsed`).
+- **Capture the per-step evidence during a capture pass** (reuse the Stage 7 validation, or one
+  extra serve run of the minimum repro). For each interaction step, in order:
+  1. **Scroll the target into view and center it** (`element.scrollIntoView({block:"center"})`)
+     so it is actually visible in the screenshot — off-screen targets produce useless frames.
+  2. Capture the **annotation geometry** with an `evaluate`: the element's **rect centre in CSS
+     px**, `window.devicePixelRatio`, and `window.innerWidth/innerHeight`
+     (`{ point:{xCss,yCss}, dpr, viewport:{w,h}, label }`; `label` e.g. `"click"`/`"right-click"`).
+  3. Take a **raw screenshot** to `evidence/stepN.png`, then perform the action.
+  4. Record the **markers/console lines** that fire in that step (from the step's `console[]`)
+     into the step's `markersObserved`.
+  The builder draws the arrow post-hoc from this geometry, so the screenshots stay raw and the
+  annotation is reproducible.
+- **Generate the report** with the builder (requires Pillow — `pip install Pillow`):
+  `python .github/skills/find-repro/scripts/build-report.py --repro repros/<slug>/repro.json`
+  It writes `<slug>.html` (self-contained) and `<slug>.linked.html` (references `evidence/`),
+  named for the repro slug so shared files have unique names.
 - Give the user a concise report: status, source (file:line/symbol), the minimum repro steps,
-  the validation result, and the artifact path.
+  the validation result, and the artifact path (including `<slug>.html`).
 
 ## Marker discipline (temporary code markers)
 
@@ -386,7 +410,10 @@ Keep the **shortest** sequence that still emits the error. Record it as `minimum
   When normal data clears the gate, this is what tells you *which input on which item* defeats it
   (see Stage 2). When an error has multiple emit sites or parallel consumers, mark **every** site so
   you can attribute the emit correctly (see Stages 1 and 3).
-- Record every marker edit in `evidence.markersUsed` (file, line, what was added).
+- Record every marker edit in `evidence.markersUsed` (file, line, what was added). Give each an
+  `id` and capture a `codeContext` snippet (a few surrounding lines with the marker line included)
+  so the human report can show the code next to where the marker fired, even after the marker is
+  reverted.
 - Revert the markers that weren't important to the repro but leave the ones that were critical to detecting the repro for review by the dev.
 - Never commit, never push, never start the dev server, never weaken/disable product code.
 
@@ -406,3 +433,7 @@ Keep the **shortest** sequence that still emits the error. Record it as `minimum
   must explain what blocks the repro. Never fabricate a repro, and never quit early.
 - Treat the task as incomplete until either a validated (possibly intermittent) minimum repro +
   artifact exists, or a clear best-progress report is produced **after exhaustive effort**.
+- The handoff artifact must be **self-describing**: everything the human report shows (text, code
+  context, observed console lines, screenshot-annotation geometry) lives in `repro.json` or files
+  it references under `evidence/`, so `<slug>.html` regenerates identically without re-running the
+  repro. The report builder requires **Pillow** (`pip install Pillow`).
